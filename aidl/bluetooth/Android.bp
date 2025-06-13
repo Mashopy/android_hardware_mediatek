@@ -33,6 +33,8 @@ cc_library_static {
     srcs: [
         "BluetoothHci.cpp",
         "net_bluetooth_mgmt.cpp",
+        "vendor_interface.cc",
+        "bluetooth_address.cc",
     ],
 }
 
