@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "android.hardware.bluetooth.service.default"
+#define LOG_TAG "android.hardware.bluetooth.service.mediatek"
 
 #include "net_bluetooth_mgmt.h"
 

@@ -1,9 +1,11 @@
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
+//
+// SPDX-FileCopyrightText: 2022 The Android Open Source Project
+// SPDX-FileCopyrightText: 2025 The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
 
 cc_defaults {
-    name: "android.hardware.bluetooth-service-build-defaults",
+    name: "android.hardware.bluetooth-service-build-mediatek",
     cflags: [
         "-Wall",
         "-Wextra",
@@ -24,10 +26,10 @@ cc_defaults {
 }
 
 cc_library_static {
-    name: "libbluetoothhcihalimpl",
+    name: "libbluetoothhcihalimplmtk",
     vendor_available: true,
     host_supported: true,
-    defaults: ["android.hardware.bluetooth-service-build-defaults"],
+    defaults: ["android.hardware.bluetooth-service-build-mediatek"],
     srcs: [
         "BluetoothHci.cpp",
         "net_bluetooth_mgmt.cpp",
@@ -35,12 +37,12 @@ cc_library_static {
 }
 
 cc_binary {
-    name: "android.hardware.bluetooth-service.default",
+    name: "android.hardware.bluetooth-service.mediatek",
     relative_install_path: "hw",
-    init_rc: ["bluetooth-service-default.rc"],
-    vintf_fragments: [":manifest_android.hardware.bluetooth-service.default.xml"],
+    init_rc: ["bluetooth-service-mediatek.rc"],
+    vintf_fragments: [":manifest_android.hardware.bluetooth-service.mediatek.xml"],
     vendor: true,
-    defaults: ["android.hardware.bluetooth-service-build-defaults"],
+    defaults: ["android.hardware.bluetooth-service-build-mediatek"],
     srcs: [
         "service.cpp",
     ],
@@ -53,11 +55,11 @@ cc_binary {
         "liblog",
     ],
     static_libs: [
-        "libbluetoothhcihalimpl",
+        "libbluetoothhcihalimplmtk",
     ],
 }
 
 filegroup {
-    name: "manifest_android.hardware.bluetooth-service.default.xml",
-    srcs: ["bluetooth-service-default.xml"],
+    name: "manifest_android.hardware.bluetooth-service.mediatek.xml",
+    srcs: ["bluetooth-service-mediatek.xml"],
 }
