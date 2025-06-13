@@ -56,9 +56,22 @@ class BluetoothDeathRecipient : public hidl_death_recipient {
 BluetoothHci::BluetoothHci()
     : death_recipient_(new BluetoothDeathRecipient(this)) {}
 
+Return<void> BluetoothHci::initialize(
+    const ::android::sp<V1_0::IBluetoothHciCallbacks>& cb) {
+  ALOGE("Using initialize from HAL V1_0 instead of initialize_1_1.");
+  return initialize_impl(cb, nullptr);
+}
+
 Return<void> BluetoothHci::initialize_1_1(
-    const ::android::sp<V1_1::IBluetoothHciCallbacks>& cb) {
+    const sp<V1_1::IBluetoothHciCallbacks>& cb) {
   ALOGI("BluetoothHci::initialize_1_1()");
+  return initialize_impl(cb, cb);
+}
+
+Return<void> BluetoothHci::initialize_1_1(
+    const sp<V1_0::IBluetoothHciCallbacks>& cb,
+    const sp<V1_1::IBluetoothHciCallbacks>& cb_1_1) {
+  ALOGI("BluetoothHci::initialize_impl()");
   if (cb == nullptr) {
     ALOGE("cb == nullptr! -> Unable to call initializationComplete(ERR)");
     return Void();
@@ -94,7 +107,7 @@ Return<void> BluetoothHci::initialize_1_1(
           ALOGE("VendorInterface -> Unable to call scoDataReceived()");
         }
       },
-      [cb](const hidl_vec<uint8_t>& packet) {
+      [cb_1_1](const hidl_vec<uint8_t>& packet) {
         auto hidl_status = cb->isoDataReceived(packet);
         if (!hidl_status.isOk()) {
           ALOGE("VendorInterface -> Unable to call isoDataReceived()");
@@ -152,12 +165,6 @@ class OldCbWrapper : public V1_1::IBluetoothHciCallbacks {
   };
 };
 
-Return<void> BluetoothHci::initialize(
-    const ::android::sp<V1_0::IBluetoothHciCallbacks>& cb) {
-  ALOGE("Using initialize from HAL V1_0 instead of initialize_1_1.");
-  return initialize_1_1(new OldCbWrapper(cb));
-}
-
 Return<void> BluetoothHci::close() {
   ALOGI("BluetoothHci::close()");
   unlink_cb_(death_recipient_);
@@ -188,6 +195,10 @@ Return<void> BluetoothHci::sendIsoData(const hidl_vec<uint8_t>& data) {
 void BluetoothHci::sendDataToController(const uint8_t type,
                                         const hidl_vec<uint8_t>& data) {
   VendorInterface::get()->Send(type, data.data(), data.size());
+}
+
+IBluetoothHci* HIDL_FETCH_IBluetoothHci(const char* /* name */) {
+  return new BluetoothHci();
 }
 
 }  // namespace implementation

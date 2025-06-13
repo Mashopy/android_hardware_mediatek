@@ -25,7 +25,7 @@
 namespace android {
 namespace hardware {
 namespace bluetooth {
-namespace V1_0 {
+namespace V1_1 {
 namespace implementation {
 
 // The property key stores the storage location of Bluetooth Device Address
@@ -55,7 +55,7 @@ class BluetoothAddress {
 };
 
 }  // namespace implementation
-}  // namespace V1_0
+}  // namespace V1_1
 }  // namespace bluetooth
 }  // namespace hardware
 }  // namespace android

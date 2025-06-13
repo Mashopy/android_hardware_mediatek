@@ -13,38 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-cc_defaults {
-    name: "android.hardware.bluetooth@1.0-defaults-mediatek",
-    vendor: true,
-    relative_install_path: "hw",
-    srcs: [
-        "bluetooth_hci_1_0.cc",
-        "bluetooth_address.cc",
-        "vendor_interface.cc",
-    ],
-    shared_libs: [
-        "android.hardware.bluetooth@1.0",
-        "libbase",
-        "libcutils",
-        "libhardware",
-        "libhidlbase",
-        "liblog",
-        "libutils",
-    ],
-    static_libs: [
-        "android.hardware.bluetooth-async",
-        "android.hardware.bluetooth-hci",
-    ],
-}
-
-cc_library {
-    name: "android.hardware.bluetooth@1.0-impl-mediatek",
-    defaults: [
-        "hidl_defaults",
-        "android.hardware.bluetooth@1.0-defaults-mediatek",
-    ],
-}
-
 cc_binary {
     name: "android.hardware.bluetooth@1.1-service-mediatek",
     defaults: ["hidl_defaults"],
@@ -54,6 +22,8 @@ cc_binary {
     srcs: [
         "service.cpp",
         "bluetooth_hci.cc",
+        "bluetooth_address.cc",
+        "vendor_interface.cc",
     ],
 
     shared_libs: [
@@ -64,11 +34,11 @@ cc_binary {
         "libutils",
         "libhardware",
         "libhidlbase",
-        "android.hardware.bluetooth@1.0-impl-mediatek",
         "android.hardware.bluetooth@1.1",
     ],
 
     static_libs: [
+        "android.hardware.bluetooth-async",
         "android.hardware.bluetooth-hci",
     ],
 }

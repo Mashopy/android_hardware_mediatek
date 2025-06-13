@@ -49,10 +49,16 @@ class BluetoothHci : public V1_1::IBluetoothHci {
   Return<void> close() override;
 
  private:
+  Return<void> initialize_impl(
+      const ::android::sp<V1_0::IBluetoothHciCallbacks>& cb,
+      const ::android::sp<V1_1::IBluetoothHciCallbacks>& cb_1_1);
+
   void sendDataToController(const uint8_t type, const hidl_vec<uint8_t>& data);
   ::android::sp<BluetoothDeathRecipient> death_recipient_;
   std::function<void(sp<BluetoothDeathRecipient>&)> unlink_cb_;
 };
+
+extern "C" IBluetoothHci* HIDL_FETCH_IBluetoothHci(const char* name);
 
 }  // namespace implementation
 }  // namespace V1_1

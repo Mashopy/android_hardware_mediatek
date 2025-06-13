@@ -16,7 +16,7 @@
 
 #include "vendor_interface.h"
 
-#define LOG_TAG "android.hardware.bluetooth@1.0-impl-mediatek"
+#define LOG_TAG "android.hardware.bluetooth@1.1-impl-mediatek"
 #include <cutils/properties.h>
 #include <utils/Log.h>
 
@@ -36,7 +36,7 @@ static const int INVALID_FD = -1;
 namespace {
 
 using android::hardware::hidl_vec;
-using android::hardware::bluetooth::V1_0::implementation::VendorInterface;
+using android::hardware::bluetooth::V1_1::implementation::VendorInterface;
 
 struct {
   tINT_CMD_CBACK cb;
@@ -140,7 +140,7 @@ const bt_vendor_callbacks_t lib_callbacks = {
 namespace android {
 namespace hardware {
 namespace bluetooth {
-namespace V1_0 {
+namespace V1_1 {
 namespace implementation {
 
 class FirmwareStartupTimer {
@@ -380,7 +380,7 @@ void VendorInterface::HandleIncomingEvent(const hidl_vec<uint8_t>& hci_packet) {
 }
 
 }  // namespace implementation
-}  // namespace V1_0
+}  // namespace V1_1
 }  // namespace bluetooth
 }  // namespace hardware
 }  // namespace android
