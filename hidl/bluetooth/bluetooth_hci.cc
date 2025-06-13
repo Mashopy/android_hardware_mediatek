@@ -21,7 +21,7 @@
 
 #include "vendor_interface.h"
 
-using android::hardware::bluetooth::V1_0::implementation::VendorInterface;
+using android::hardware::bluetooth::V1_1::implementation::VendorInterface;
 
 namespace android {
 namespace hardware {
@@ -68,7 +68,7 @@ Return<void> BluetoothHci::initialize_1_1(
   return initialize_impl(cb, cb);
 }
 
-Return<void> BluetoothHci::initialize_1_1(
+Return<void> BluetoothHci::initialize_impl(
     const sp<V1_0::IBluetoothHciCallbacks>& cb,
     const sp<V1_1::IBluetoothHciCallbacks>& cb_1_1) {
   ALOGI("BluetoothHci::initialize_impl()");
@@ -108,7 +108,7 @@ Return<void> BluetoothHci::initialize_1_1(
         }
       },
       [cb_1_1](const hidl_vec<uint8_t>& packet) {
-        auto hidl_status = cb->isoDataReceived(packet);
+        auto hidl_status = cb_1_1->isoDataReceived(packet);
         if (!hidl_status.isOk()) {
           ALOGE("VendorInterface -> Unable to call isoDataReceived()");
         }
