@@ -63,14 +63,14 @@ Return<void> BluetoothHci::initialize(
 }
 
 Return<void> BluetoothHci::initialize_1_1(
-    const sp<V1_1::IBluetoothHciCallbacks>& cb) {
+    const ::android::sp<V1_1::IBluetoothHciCallbacks>& cb) {
   ALOGI("BluetoothHci::initialize_1_1()");
   return initialize_impl(cb, cb);
 }
 
 Return<void> BluetoothHci::initialize_impl(
-    const sp<V1_0::IBluetoothHciCallbacks>& cb,
-    const sp<V1_1::IBluetoothHciCallbacks>& cb_1_1) {
+    const ::android::sp<V1_0::IBluetoothHciCallbacks>& cb,
+    const ::android::sp<V1_1::IBluetoothHciCallbacks>& cb_1_1) {
   ALOGI("BluetoothHci::initialize_impl()");
   if (cb == nullptr) {
     ALOGE("cb == nullptr! -> Unable to call initializationComplete(ERR)");
