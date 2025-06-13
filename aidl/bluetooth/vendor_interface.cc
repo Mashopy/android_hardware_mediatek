@@ -16,31 +16,31 @@
 
 #include "vendor_interface.h"
 
-#define LOG_TAG "android.hardware.bluetooth@1.0-impl"
+#define LOG_TAG "android.hardware.bluetooth.service.mediatek"
 #include <cutils/properties.h>
 #include <utils/Log.h>
 
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <iostream>
 
 #include "bluetooth_address.h"
 #include "h4_protocol.h"
-#include "mct_protocol.h"
 
-#ifdef BT_FUZZER
-static const char* VENDOR_LIBRARY_NAME = "libbt-vendor-fuzz.so";
-#else
 static const char* VENDOR_LIBRARY_NAME = "libbt-vendor.so";
-#endif
 static const char* VENDOR_LIBRARY_SYMBOL_NAME =
     "BLUETOOTH_VENDOR_LIB_INTERFACE";
 
 static const int INVALID_FD = -1;
+// Event codes (Volume 2, Part E, 7.7.14)
+static const uint8_t HCI_COMMAND_COMPLETE_EVENT = 0x0E;
 
 namespace {
 
-using android::hardware::hidl_vec;
-using android::hardware::bluetooth::V1_0::implementation::VendorInterface;
+
+using aidl::android::hardware::bluetooth::impl::VendorInterface;
+using namespace aidl::android::hardware::bluetooth::impl;
+using namespace ::android::hardware::bluetooth::hci;
 
 struct {
   tINT_CMD_CBACK cb;
@@ -55,7 +55,7 @@ bool recent_activity_flag;
 VendorInterface* g_vendor_interface = nullptr;
 std::mutex wakeup_mutex_;
 
-HC_BT_HDR* WrapPacketAndCopy(uint16_t event, const hidl_vec<uint8_t>& data) {
+HC_BT_HDR* WrapPacketAndCopy(uint16_t event, const std::vector<uint8_t>& data) {
   size_t packet_size = data.size() + sizeof(HC_BT_HDR);
   HC_BT_HDR* packet = reinterpret_cast<HC_BT_HDR*>(new uint8_t[packet_size]);
   packet->offset = 0;
@@ -68,14 +68,14 @@ HC_BT_HDR* WrapPacketAndCopy(uint16_t event, const hidl_vec<uint8_t>& data) {
   return packet;
 }
 
-bool internal_command_event_match(const hidl_vec<uint8_t>& packet) {
+bool internal_command_event_match(const std::vector<uint8_t>& packet) {
   uint8_t event_code = packet[0];
   if (event_code != HCI_COMMAND_COMPLETE_EVENT) {
     ALOGE("%s: Unhandled event type %02X", __func__, event_code);
     return false;
   }
 
-  size_t opcode_offset = HCI_EVENT_PREAMBLE_SIZE + 1;  // Skip num packets.
+  size_t opcode_offset = kEventHeaderSize + 1;  // Skip num packets.
 
   uint16_t opcode = packet[opcode_offset] | (packet[opcode_offset + 1] << 8);
 
@@ -87,11 +87,11 @@ bool internal_command_event_match(const hidl_vec<uint8_t>& packet) {
 uint8_t transmit_cb(uint16_t opcode, void* buffer, tINT_CMD_CBACK callback) {
   ALOGV("%s opcode: 0x%04x, ptr: %p, cb: %p", __func__, opcode, buffer,
         callback);
+
   internal_command.cb = callback;
   internal_command.opcode = opcode;
-  uint8_t type = HCI_PACKET_TYPE_COMMAND;
   HC_BT_HDR* bt_hdr = reinterpret_cast<HC_BT_HDR*>(buffer);
-  VendorInterface::get()->Send(type, bt_hdr->data, bt_hdr->len);
+  VendorInterface::get()->Send(PacketType::COMMAND, bt_hdr->data, bt_hdr->len);
   delete[] reinterpret_cast<uint8_t*>(buffer);
   return true;
 }
@@ -141,11 +141,7 @@ const bt_vendor_callbacks_t lib_callbacks = {
 
 }  // namespace
 
-namespace android {
-namespace hardware {
-namespace bluetooth {
-namespace V1_0 {
-namespace implementation {
+namespace aidl::android::hardware::bluetooth::impl {
 
 class FirmwareStartupTimer {
  public:
@@ -163,17 +159,16 @@ class FirmwareStartupTimer {
   std::chrono::steady_clock::time_point start_time_;
 };
 
-bool VendorInterface::Initialize(
-    InitializeCompleteCallback initialize_complete_cb,
-    PacketReadCallback event_cb, PacketReadCallback acl_cb,
-    PacketReadCallback sco_cb, PacketReadCallback iso_cb) {
+bool VendorInterface::Initialize(InitializeCompleteCallback initialize_complete_cb,
+                        PacketReadCallback cmd_cb,PacketReadCallback acl_cb,
+                        PacketReadCallback sco_cb,PacketReadCallback event_cb,
+                        PacketReadCallback iso_cb,DisconnectCallback disconnect_cb) {
   if (g_vendor_interface) {
     ALOGE("%s: No previous Shutdown()?", __func__);
     return false;
   }
   g_vendor_interface = new VendorInterface();
-  return g_vendor_interface->Open(initialize_complete_cb, event_cb, acl_cb,
-                                  sco_cb, iso_cb);
+  return g_vendor_interface->Open(initialize_complete_cb, cmd_cb, acl_cb, sco_cb,event_cb, iso_cb,disconnect_cb);
 }
 
 void VendorInterface::Shutdown() {
@@ -187,10 +182,9 @@ void VendorInterface::Shutdown() {
 VendorInterface* VendorInterface::get() { return g_vendor_interface; }
 
 bool VendorInterface::Open(InitializeCompleteCallback initialize_complete_cb,
-                           PacketReadCallback event_cb,
-                           PacketReadCallback acl_cb,
-                           PacketReadCallback sco_cb,
-                           PacketReadCallback iso_cb) {
+                        PacketReadCallback cmd_cb,PacketReadCallback acl_cb,
+                        PacketReadCallback sco_cb,PacketReadCallback event_cb,
+                        PacketReadCallback iso_cb,DisconnectCallback disconnect_cb) {
   initialize_complete_cb_ = initialize_complete_cb;
 
   // Initialize vendor interface
@@ -247,24 +241,16 @@ bool VendorInterface::Open(InitializeCompleteCallback initialize_complete_cb,
   }
 
   event_cb_ = event_cb;
-  PacketReadCallback intercept_events = [this](const hidl_vec<uint8_t>& event) {
+  PacketReadCallback intercept_events = [this](const std::vector<uint8_t>& event) {
     HandleIncomingEvent(event);
   };
 
   if (fd_count == 1) {
-    hci::H4Protocol* h4_hci =
-        new hci::H4Protocol(fd_list[0], intercept_events, acl_cb, sco_cb, iso_cb);
+    H4Protocol* h4_hci =
+        new H4Protocol(fd_list[0], cmd_cb, acl_cb, sco_cb, intercept_events, iso_cb, disconnect_cb);
     fd_watcher_.WatchFdForNonBlockingReads(
-        fd_list[0], [h4_hci](int fd) { h4_hci->OnDataReady(fd); });
+        fd_list[0], [h4_hci](int) { h4_hci->OnDataReady(); });
     hci_ = h4_hci;
-  } else {
-    hci::MctProtocol* mct_hci =
-        new hci::MctProtocol(fd_list, intercept_events, acl_cb);
-    fd_watcher_.WatchFdForNonBlockingReads(
-        fd_list[CH_EVT], [mct_hci](int fd) { mct_hci->OnEventDataReady(fd); });
-    fd_watcher_.WatchFdForNonBlockingReads(
-        fd_list[CH_ACL_IN], [mct_hci](int fd) { mct_hci->OnAclDataReady(fd); });
-    hci_ = mct_hci;
   }
 
   // Initially, the power management is off.
@@ -313,7 +299,7 @@ void VendorInterface::Close() {
   }
 }
 
-size_t VendorInterface::Send(uint8_t type, const uint8_t* data, size_t length) {
+size_t VendorInterface::Send(PacketType type, const uint8_t* data, size_t length) {
   std::unique_lock<std::mutex> lock(wakeup_mutex_);
   recent_activity_flag = true;
 
@@ -369,10 +355,10 @@ void VendorInterface::OnTimeout() {
   recent_activity_flag = false;
 }
 
-void VendorInterface::HandleIncomingEvent(const hidl_vec<uint8_t>& hci_packet) {
+void VendorInterface::HandleIncomingEvent(const std::vector<uint8_t>& hci_packet) {
   if (internal_command.cb != nullptr &&
       internal_command_event_match(hci_packet)) {
-    HC_BT_HDR* bt_hdr = WrapPacketAndCopy(HCI_PACKET_TYPE_EVENT, hci_packet);
+    HC_BT_HDR* bt_hdr = WrapPacketAndCopy(static_cast<uint16_t>(PacketType::EVENT), hci_packet);
 
     // The callbacks can send new commands, so don't zero after calling.
     tINT_CMD_CBACK saved_cb = internal_command.cb;
@@ -383,8 +369,4 @@ void VendorInterface::HandleIncomingEvent(const hidl_vec<uint8_t>& hci_packet) {
   }
 }
 
-}  // namespace implementation
-}  // namespace V1_0
-}  // namespace bluetooth
-}  // namespace hardware
-}  // namespace android
+}  // namespace aidl::android::hardware::bluetooth::impl

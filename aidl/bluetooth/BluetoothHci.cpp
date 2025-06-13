@@ -26,8 +26,13 @@
 #include <string.h>
 #include <sys/uio.h>
 #include <termios.h>
+#include <hidl/HidlSupport.h>
+#include <hidl/HidlTransportSupport.h>
+#include <iostream>
 
 #include "log/log.h"
+
+#include "vendor_interface.h"
 
 namespace {
 int SetTerminalRaw(int fd) {
@@ -222,77 +227,44 @@ ndk::ScopedAStatus BluetoothHci::initialize(
     cb->initializationComplete(Status::ALREADY_INITIALIZED);
     return ndk::ScopedAStatus::ok();
   }
-
-  mCb = cb;
-  management_.reset(new NetBluetoothMgmt);
-  mFd = management_->openHci();
-  if (mFd < 0) {
-    management_.reset();
-
-    ALOGI("Unable to open Linux interface, trying default path.");
-    mFd = getFdFromDevPath();
-    if (mFd < 0) {
-      mState = HalState::READY;
-      cb->initializationComplete(Status::UNABLE_TO_OPEN_INTERFACE);
-      return ndk::ScopedAStatus::ok();
-    }
-  }
-
-  mDeathRecipient->LinkToDeath(mCb);
-
-  // TODO: HCI Reset on emulators since the bluetooth controller
-  // cannot be powered on/off during the HAL setup; and the stack
-  // might received spurious packets/events during boottime.
-  // Proper solution would be to use bt-virtio or vsock to better
-  // control the link to rootcanal and the controller lifetime.
-  const std::string kBoardProperty = "ro.product.board";
-  const std::string kCuttlefishBoard = "cutf";
-  auto board_name = GetSystemProperty(kBoardProperty);
-  if (board_name.has_value() && (
-        starts_with(board_name.value(), "cutf") ||
-        starts_with(board_name.value(), "goldfish"))) {
-    reset();
-  }
-
-  mH4 = std::make_shared<H4Protocol>(
-      mFd,
-      [](const std::vector<uint8_t>& /* raw_command */) {
+ 
+  bool rc = VendorInterface::Initialize(
+      [cb](bool status) {
+        cb->initializationComplete(
+            status ? Status::SUCCESS : Status::HARDWARE_INITIALIZATION_ERROR);
+      },
+      [](const std::vector<uint8_t>& ) {
         LOG_ALWAYS_FATAL("Unexpected command!");
       },
-      [this](const std::vector<uint8_t>& raw_acl) {
-        mCb->aclDataReceived(raw_acl);
+      [cb](const std::vector<uint8_t>& raw_acl) {
+        cb->aclDataReceived(raw_acl);
       },
-      [this](const std::vector<uint8_t>& raw_sco) {
-        mCb->scoDataReceived(raw_sco);
+      [cb](const std::vector<uint8_t>& raw_sco) {
+        cb->scoDataReceived(raw_sco);
       },
-      [this](const std::vector<uint8_t>& raw_event) {
-        mCb->hciEventReceived(raw_event);
+      [cb](const std::vector<uint8_t>& raw_event) {
+        cb->hciEventReceived(raw_event);
       },
-      [this](const std::vector<uint8_t>& raw_iso) {
-        mCb->isoDataReceived(raw_iso);
+      [cb](const std::vector<uint8_t>& raw_iso) {
+        cb->isoDataReceived(raw_iso);
       },
       [this]() {
         ALOGI("HCI socket device disconnected");
         mFdWatcher.StopWatchingFileDescriptors();
-      });
-  mFdWatcher.WatchFdForNonBlockingReads(mFd,
-                                        [this](int) { mH4->OnDataReady(); });
+      }
+  );
+  if (!rc) {
+    ALOGE("new AIDL init vendor failed");
+    return ndk::ScopedAStatus::fromServiceSpecificError(STATUS_BAD_VALUE);
+  }
 
+  mCb = cb;
   {
     std::lock_guard<std::mutex> guard(mStateMutex);
     mState = HalState::ONE_CLIENT;
   }
-  ALOGI("initialization complete");
-  auto status = mCb->initializationComplete(Status::SUCCESS);
-  if (!status.isOk()) {
-    if (!mDeathRecipient->getHasDied()) {
-      ALOGE("Error sending init callback, but no death notification");
-    }
-    close();
-    return ndk::ScopedAStatus::fromServiceSpecificError(
-        STATUS_FAILED_TRANSACTION);
-  }
 
+  ALOGI("initialization complete");
   return ndk::ScopedAStatus::ok();
 }
 
@@ -301,27 +273,19 @@ ndk::ScopedAStatus BluetoothHci::close() {
   {
     std::lock_guard<std::mutex> guard(mStateMutex);
     if (mState != HalState::ONE_CLIENT) {
-      LOG_ALWAYS_FATAL_IF(mState == HalState::INITIALIZING,
-                          "mState is INITIALIZING");
       ALOGI("Already closed");
       return ndk::ScopedAStatus::ok();
     }
     mState = HalState::CLOSING;
   }
 
-  mFdWatcher.StopWatchingFileDescriptors();
-
-  if (management_) {
-    management_->closeHci();
-  } else {
-    ::close(mFd);
-  }
+  VendorInterface::Shutdown();
 
   {
     std::lock_guard<std::mutex> guard(mStateMutex);
     mState = HalState::READY;
-    mH4 = nullptr;
   }
+
   return ndk::ScopedAStatus::ok();
 }
 
@@ -346,18 +310,8 @@ ndk::ScopedAStatus BluetoothHci::sendIsoData(
 }
 
 ndk::ScopedAStatus BluetoothHci::send(PacketType type,
-    const std::vector<uint8_t>& v) {
-  if (v.empty()) {
-    ALOGE("Packet is empty, no data was found to be sent");
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-  }
-
-  std::lock_guard<std::mutex> guard(mStateMutex);
-  if (mH4 == nullptr) {
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-  }
-
-  mH4->Send(type, v);
+    const std::vector<uint8_t>& data) {
+  VendorInterface::get()->Send(type, data.data(), data.size());
   return ndk::ScopedAStatus::ok();
 }
 
