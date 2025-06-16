@@ -1,4 +1,5 @@
 service vendor.bluetooth-default /vendor/bin/hw/android.hardware.bluetooth-service.mediatek
+    interface aidl android.hardware.bluetooth.IBluetoothHci/default
     class hal
     capabilities BLOCK_SUSPEND NET_ADMIN SYS_NICE
     user bluetooth
